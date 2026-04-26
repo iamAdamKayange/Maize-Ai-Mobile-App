@@ -4,31 +4,70 @@ A complete, production-ready Flutter mobile application for detecting maize plan
 
 ---
 
-## 📱 Screens Implemented
+## Screens Implemented
 
-| Screen | File | Description |
-|---|---|---|
-| Loading | `loading_screen.dart` | Animated ring loader on app launch |
-| Get Started | `started_screen.dart` | Splash with maize plant illustration |
-| Onboarding 1 | `onboarding_screen.dart` | Detect Diseases Early |
-| Onboarding 2 | `onboarding_screen.dart` | Snap & Get Results |
-| Onboarding 3 | `onboarding_screen.dart` | Receive Treatment Advice |
-| Dashboard | `dashboard_screen.dart` | Home with banner, disease cards, recent scans |
-| Scanner | `scanner_screen.dart` | Live camera overlay + detection popup |
-| Scan Progress | `scan_progress_screen.dart` | Animated ring with "Please Don't Close" |
-| Scan Results | `scan_results_screen.dart` | Disease info, confidence score, prevention |
-| Save Report Dialog | `scan_results_screen.dart` | "Report Saved!" confirmation dialog |
-| My Plant | `my_plant_screen.dart` | Plant list with expandable cards |
-| Add Plant Form | `my_plant_screen.dart` | Add new plant with gallery/camera |
-| Notifications | `other_screens.dart` | Recent Activity + Unread tabs |
-| Settings | `other_screens.dart` | Dark mode, language, about, version |
-| About Us | `other_screens.dart` | App description and mission |
-| Privacy Policy | `other_screens.dart` | Full privacy policy text |
-| Drawer Menu | `drawer_menu.dart` | Side navigation with all routes |
+1. lib
+   1.1 main.dart
+
+   1.2 loading_screen.dart
+   1.3 started_screen.dart
+   1.4 onboarding_screen.dart
+   1.5 dashboard_screen.dart
+   1.6 scanner_screen.dart
+   1.7 scan_progress_screen.dart
+   1.8 scan_results_screen.dart
+   1.9 my_plant_screen.dart
+   1.10 other_screens.dart
+   1.11 drawer_menu.dart
+
+   1.12 widgets
+       1.12.1 custom_button.dart
+       1.12.2 custom_card.dart
+       1.12.3 disease_card.dart
+       1.12.4 plant_card.dart
+       1.12.5 recent_scan_card.dart
+       1.12.6 notification_tile.dart
+       1.12.7 save_report_dialog.dart
+
+   1.13 models
+       1.13.1 disease_model.dart
+       1.13.2 plant_model.dart
+       1.13.3 scan_result_model.dart
+       1.13.4 notification_model.dart
+
+   1.14 services
+       1.14.1 camera_service.dart
+       1.14.2 detection_service.dart
+       1.14.3 storage_service.dart
+       1.14.4 notification_service.dart
+
+   1.15 utils
+       1.15.1 app_colors.dart
+       1.15.2 app_strings.dart
+       1.15.3 app_images.dart
+       1.15.4 constants.dart
+       1.15.5 routes.dart
+
+   1.16 assets
+       1.16.1 images
+             1.16.1.1 logo.png
+             1.16.1.2 maize.png
+             1.16.1.3 onboarding1.png
+             1.16.1.4 onboarding2.png
+             1.16.1.5 onboarding3.png
+
+       1.16.2 icons
+             1.16.2.1 scan.png
+             1.16.2.2 plant.png
+             1.16.2.3 notification.png
+
+       1.16.3 animations
+             1.16.3.1 loader.json
+
 
 ---
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Prerequisites
 - Flutter SDK `>=3.0.0`
@@ -58,7 +97,7 @@ flutter build ios --release
 
 ---
 
-## 📂 Project Structure
+##  Project Structure
 
 ```
 maize_ai/
@@ -100,7 +139,7 @@ maize_ai/
 
 ---
 
-## 🎨 Design System
+## Design System
 
 ### Colors
 | Token | Hex | Usage |
@@ -130,7 +169,7 @@ maize_ai/
 
 ---
 
-## 📦 Dependencies
+## Dependencies
 
 ```yaml
 google_fonts: ^6.1.0           # Poppins font
@@ -144,79 +183,3 @@ lottie: ^3.0.0                 # Lottie animations
 provider: ^6.1.1               # State management
 ```
 
----
-
-## 🔌 AI Integration (Next Steps)
-
-To integrate a real AI model for disease detection, replace the mock logic in `scanner_screen.dart` and `scan_progress_screen.dart`:
-
-### Option A — TensorFlow Lite (On-Device)
-```dart
-// Add to pubspec.yaml:
-// tflite_flutter: ^0.10.4
-
-import 'package:tflite_flutter/tflite_flutter.dart';
-
-final interpreter = await Interpreter.fromAsset('assets/maize_model.tflite');
-// Run inference on captured image
-```
-
-### Option B — REST API (Cloud)
-```dart
-final response = await http.post(
-  Uri.parse('https://your-api.com/detect'),
-  body: {'image': base64Image},
-);
-final result = jsonDecode(response.body);
-```
-
-### Option C — Google ML Kit
-```yaml
-google_mlkit_image_labeling: ^0.11.0
-```
-
----
-
-## 🌍 Localization (Swahili / English)
-
-To add Swahili support (great for Tanzania!):
-```yaml
-# pubspec.yaml
-flutter_localizations:
-  sdk: flutter
-intl: ^0.19.0
-```
-
-Then create `lib/l10n/app_sw.arb` and `app_en.arb`.
-
----
-
-## 📸 Adding Real Images
-
-Place your images in `assets/` folder and update `pubspec.yaml`:
-```yaml
-flutter:
-  assets:
-    - assets/images/
-    - assets/icons/
-```
-
----
-
-## 🛠 Troubleshooting
-
-| Issue | Solution |
-|---|---|
-| `flutter pub get` fails | Check Flutter SDK version `>=3.0.0` |
-| Camera not working on emulator | Use a physical device |
-| Google Fonts not loading | Check internet connection on first run |
-| Build fails on Android | Run `cd android && ./gradlew clean` |
-
----
-
-## 📄 License
-MIT License – Free to use and modify for your project.
-
----
-
-*Built with ❤️ for African farmers using Flutter & Dart*

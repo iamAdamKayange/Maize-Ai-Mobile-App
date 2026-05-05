@@ -1,11 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
+import 'dart:io';
 import '../theme/app_theme.dart';
 import '../widgets/bottom_nav_bar.dart';
 
 class ScanResultsScreen extends StatefulWidget {
-  const ScanResultsScreen({super.key});
+  final String diseaseName;
+  final double confidence;
+  final File imageFile;
+
+  const ScanResultsScreen({
+    super.key,
+    required this.diseaseName,
+    required this.confidence,
+    required this.imageFile,
+  });
 
   @override
   State<ScanResultsScreen> createState() => _ScanResultsScreenState();
@@ -18,6 +28,204 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
   late Animation<Offset> _slideAnimation;
+
+  // Disease information map
+  // REPLACE the diseaseDatabase with this:
+  static const Map<String, Map<String, String>> diseaseDatabase = {
+    'GLS': {
+      // ✅ LABEL SAHIHI
+      'fullName': 'Gray Leaf Spot',
+      'description':
+          'Fungal infection (Cercospora zeae-maydis) causing grayish lesions on leaves. This disease can significantly reduce yield if not treated promptly.',
+      'severity': 'Moderate',
+      'color': '#FF6D00',
+    },
+    'Healthy': {
+      // ✅ LABEL SAHIHI (all caps)
+      'fullName': 'Healthy Plant',
+      'description':
+          'Your maize plant appears to be in good health with no visible disease symptoms. Continue good agricultural practices to maintain plant health.',
+      'severity': 'None',
+      'color': '#2E7D32',
+    },
+    'MLN': {
+      // ✅ LABEL SAHIHI
+      'fullName': 'Maize Lethal Necrosis',
+      'description':
+          'Serious viral disease caused by combination of Maize chlorotic mottle virus and Sugarcane mosaic virus. Causes leaf drying and potential plant death.',
+      'severity': 'Severe',
+      'color': '#D32F2F',
+    },
+    'MSV': {
+      // ✅ LABEL SAHIHI
+      'fullName': 'Maize Streak Virus',
+      'description':
+          'Viral disease transmitted by leafhoppers, causing yellow streaks on leaves. Can cause significant yield loss if infection occurs early.',
+      'severity': 'High',
+      'color': '#F57C00',
+    },
+  };
+  // Prevention measures based on disease
+  Map<String, List<Map<String, dynamic>>> getPreventionSteps() {
+    final disease = widget.diseaseName;
+
+    if (disease == 'GLS') {
+      return {
+        'steps': [
+          {
+            'icon': Icons.delete_outline,
+            'title': 'Remove Infected Leaves',
+            'color': const Color(0xFFFF6D00),
+          },
+          {
+            'icon': Icons.cleaning_services,
+            'title': 'Apply Fungicide (Azoxystrobin)',
+            'color': const Color(0xFF2E7D32),
+          },
+          {
+            'icon': Icons.grass,
+            'title': 'Plant Resistant Varieties',
+            'color': const Color(0xFF0066CC),
+          },
+          {
+            'icon': Icons.water_drop,
+            'title': 'Improve Air Circulation',
+            'color': const Color(0xFF00ACC1),
+          },
+          {
+            'icon': Icons.rotate_left,
+            'title': 'Crop Rotation (2-3 years)',
+            'color': const Color(0xFF7B1FA2),
+          },
+        ],
+      };
+    } else if (disease == 'MLN') {
+      return {
+        'steps': [
+          {
+            'icon': Icons.delete_sweep,
+            'title': 'Remove and Destroy Infected Plants',
+            'color': const Color(0xFFD32F2F),
+          },
+          {
+            'icon': Icons.bug_report,
+            'title': 'Control Vector Insects (Aphids)',
+            'color': const Color(0xFFFF6D00),
+          },
+          {
+            'icon': Icons.grass,
+            'title': 'Use MLN-Tolerant Varieties',
+            'color': const Color(0xFF2E7D32),
+          },
+          {
+            'icon': Icons.agriculture,
+            'title': 'Practice Strict Field Hygiene',
+            'color': const Color(0xFF0066CC),
+          },
+          {
+            'icon': Icons.timer,
+            'title': 'Early Planting to Avoid Vectors',
+            'color': const Color(0xFF7B1FA2),
+          },
+        ],
+      };
+    } else if (disease == 'MSV') {
+      return {
+        'steps': [
+          {
+            'icon': Icons.bug_report,
+            'title': 'Control Leafhopper Population',
+            'color': const Color(0xFFF57C00),
+          },
+          {
+            'icon': Icons.grass,
+            'title': 'Plant MSV-Resistant Cultivars',
+            'color': const Color(0xFF2E7D32),
+          },
+          {
+            'icon': Icons.calendar_today,
+            'title': 'Adjust Planting Dates',
+            'color': const Color(0xFF0066CC),
+          },
+          {
+            'icon': Icons.cleaning_services,
+            'title': 'Remove Weed Hosts',
+            'color': const Color(0xFF00ACC1),
+          },
+          {
+            'icon': Icons.rotate_left,
+            'title': 'Crop Rotation with Non-Hosts',
+            'color': const Color(0xFF7B1FA2),
+          },
+        ],
+      };
+    } else {
+      // Healthy or Unknown
+      return {
+        'steps': [
+          {
+            'icon': Icons.water_drop,
+            'title': 'Maintain Proper Irrigation',
+            'color': const Color(0xFF2E7D32),
+          },
+          {
+            'icon': Icons.grass,
+            'title': 'Use Certified Disease-Free Seeds',
+            'color': const Color(0xFF0066CC),
+          },
+          {
+            'icon': Icons.agriculture,
+            'title': 'Practice Crop Rotation',
+            'color': const Color(0xFF00ACC1),
+          },
+          {
+            'icon': Icons.compost,
+
+            'title': 'Balanced Fertilizer Application',
+            'color': const Color(0xFFFF6D00),
+          },
+          {
+            'icon': Icons.visibility,
+            'title': 'Regular Field Scouting',
+            'color': const Color(0xFF7B1FA2),
+          },
+        ],
+      };
+    }
+  }
+
+  String getDisplayDiseaseName() {
+    final disease = widget.diseaseName;
+    if (diseaseDatabase.containsKey(disease)) {
+      return diseaseDatabase[disease]!['fullName']!;
+    }
+    return disease;
+  }
+
+  String getDiseaseDescription() {
+    final disease = widget.diseaseName;
+    if (diseaseDatabase.containsKey(disease)) {
+      return diseaseDatabase[disease]!['description']!;
+    }
+    return 'Analysis complete. Please consult an agricultural expert for more information about this condition.';
+  }
+
+  Color getSeverityColor() {
+    final disease = widget.diseaseName;
+    if (diseaseDatabase.containsKey(disease)) {
+      final colorHex = diseaseDatabase[disease]!['color']!;
+      return Color(int.parse(colorHex.replaceFirst('#', '0xFF')));
+    }
+    return AppTheme.primaryGreen;
+  }
+
+  String getSeverityLevel() {
+    final disease = widget.diseaseName;
+    if (diseaseDatabase.containsKey(disease)) {
+      return diseaseDatabase[disease]!['severity']!;
+    }
+    return 'Unknown';
+  }
 
   @override
   void initState() {
@@ -52,7 +260,6 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
     super.dispose();
   }
 
-  // ignore: unused_element
   void _saveReport() {
     setState(() => _showDialog = true);
     HapticFeedback.mediumImpact();
@@ -60,6 +267,12 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isHealthy = widget.diseaseName == 'Healthy';
+    final severityColor = getSeverityColor();
+    final preventionData = getPreventionSteps();
+    final preventionSteps =
+        preventionData['steps'] as List<Map<String, dynamic>>;
+
     return Scaffold(
       backgroundColor: AppTheme.bgLight,
       appBar: _buildModernAppBar(),
@@ -75,7 +288,7 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
                   opacity: _fadeAnimation,
                   child: ScaleTransition(
                     scale: _scaleAnimation,
-                    child: _buildHeroResultCard(),
+                    child: _buildHeroResultCard(isHealthy, severityColor),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -88,13 +301,13 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
 
                 SlideTransition(
                   position: _slideAnimation,
-                  child: _buildDiagnosisSection(),
+                  child: _buildDiagnosisSection(isHealthy, severityColor),
                 ),
                 const SizedBox(height: 24),
 
                 SlideTransition(
                   position: _slideAnimation,
-                  child: _buildPreventionSection(),
+                  child: _buildPreventionSection(preventionSteps),
                 ),
                 const SizedBox(height: 32),
 
@@ -197,23 +410,31 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
     );
   }
 
-  Widget _buildHeroResultCard() {
+  Widget _buildHeroResultCard(bool isHealthy, Color severityColor) {
+    final diseaseDisplayName = getDisplayDiseaseName();
+
     return Container(
       height: 160,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            const Color(0xFF2E7D32),
-            const Color(0xFF4CAF50),
-            const Color(0xFF66BB6A),
-          ],
+          colors: isHealthy
+              ? [
+                  const Color(0xFF2E7D32),
+                  const Color(0xFF4CAF50),
+                  const Color(0xFF66BB6A),
+                ]
+              : [
+                  severityColor,
+                  severityColor.withValues(alpha: 0.8),
+                  severityColor.withValues(alpha: 0.6),
+                ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.primaryGreen.withValues(alpha: 0.3),
+            color: severityColor.withValues(alpha: 0.3),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -262,8 +483,10 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
                     ),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Icon(
-                    Icons.grass_rounded,
+                  child: Icon(
+                    isHealthy
+                        ? Icons.health_and_safety_rounded
+                        : Icons.warning_rounded,
                     color: Colors.white,
                     size: 42,
                   ),
@@ -280,11 +503,13 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
                           vertical: 5,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFD32F2F),
+                          color: isHealthy
+                              ? Colors.green
+                              : const Color(0xFFD32F2F),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          'DISEASE DETECTED',
+                          isHealthy ? 'HEALTHY PLANT' : 'DISEASE DETECTED',
                           style: GoogleFonts.poppins(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
@@ -295,7 +520,7 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Northern Leaf Blight',
+                        diseaseDisplayName,
                         style: GoogleFonts.poppins(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
@@ -307,13 +532,15 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
                       Row(
                         children: [
                           Icon(
-                            Icons.check_circle_rounded,
+                            isHealthy
+                                ? Icons.check_circle_rounded
+                                : Icons.warning_rounded,
                             color: Colors.white.withValues(alpha: 0.9),
                             size: 14,
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            'Maize Plant Leaf • High Risk',
+                            'Maize Plant • ${getSeverityLevel()} Risk',
                             style: GoogleFonts.poppins(
                               fontSize: 12,
                               color: Colors.white.withValues(alpha: 0.9),
@@ -333,6 +560,9 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
   }
 
   Widget _buildConfidenceCard() {
+    final confidencePercent = (widget.confidence * 100).toStringAsFixed(1);
+    final isHighConfidence = widget.confidence > 0.7;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -383,15 +613,19 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryGreen.withValues(alpha: 0.1),
+                  color:
+                      (isHighConfidence ? AppTheme.primaryGreen : Colors.orange)
+                          .withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  'High Accuracy',
+                  isHighConfidence ? 'High Accuracy' : 'Moderate Accuracy',
                   style: GoogleFonts.poppins(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.primaryGreen,
+                    color: isHighConfidence
+                        ? AppTheme.primaryGreen
+                        : Colors.orange,
                   ),
                 ),
               ),
@@ -405,11 +639,13 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '95%',
+                      '$confidencePercent%',
                       style: GoogleFonts.poppins(
                         fontSize: 36,
                         fontWeight: FontWeight.w800,
-                        color: AppTheme.primaryGreen,
+                        color: isHighConfidence
+                            ? AppTheme.primaryGreen
+                            : Colors.orange,
                         letterSpacing: -1,
                       ),
                     ),
@@ -428,7 +664,7 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '98%',
+                      '${(widget.confidence * 99 + 1).toStringAsFixed(1)}%',
                       style: GoogleFonts.poppins(
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
@@ -451,9 +687,9 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: LinearProgressIndicator(
-              value: 0.95,
+              value: widget.confidence,
               backgroundColor: AppTheme.divider,
-              color: AppTheme.primaryGreen,
+              color: isHighConfidence ? AppTheme.primaryGreen : Colors.orange,
               minHeight: 10,
             ),
           ),
@@ -470,7 +706,7 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    'Scanned 2 minutes ago',
+                    'Scanned just now',
                     style: GoogleFonts.poppins(
                       fontSize: 11,
                       color: AppTheme.textGrey,
@@ -503,7 +739,9 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
     );
   }
 
-  Widget _buildDiagnosisSection() {
+  Widget _buildDiagnosisSection(bool isHealthy, Color severityColor) {
+    final description = getDiseaseDescription();
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -525,18 +763,20 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
+                  color: severityColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(
-                  Icons.healing_rounded,
-                  color: Color(0xFFD32F2F),
+                child: Icon(
+                  isHealthy
+                      ? Icons.health_and_safety_rounded
+                      : Icons.healing_rounded,
+                  color: severityColor,
                   size: 22,
                 ),
               ),
               const SizedBox(width: 12),
               Text(
-                'Diagnosis',
+                isHealthy ? 'Health Assessment' : 'Diagnosis',
                 style: GoogleFonts.poppins(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
@@ -549,21 +789,23 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.red.withValues(alpha: 0.05),
+              color: severityColor.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.red.withValues(alpha: 0.1)),
+              border: Border.all(color: severityColor.withValues(alpha: 0.1)),
             ),
             child: Row(
               children: [
                 Icon(
-                  Icons.warning_amber_rounded,
-                  color: const Color(0xFFD32F2F),
+                  isHealthy
+                      ? Icons.check_circle_rounded
+                      : Icons.warning_amber_rounded,
+                  color: severityColor,
                   size: 24,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Fungal infection (Exserohilum turcicum) causing elongated lesions on leaves. This disease can significantly reduce yield if not treated promptly.',
+                    description,
                     style: GoogleFonts.poppins(
                       fontSize: 14,
                       color: AppTheme.textDark,
@@ -579,35 +821,7 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
     );
   }
 
-  Widget _buildPreventionSection() {
-    final preventionSteps = [
-      {
-        'icon': Icons.delete_outline,
-        'title': 'Remove Affected Leaves',
-        'color': const Color(0xFFFF6D00),
-      },
-      {
-        'icon': Icons.cleaning_services,
-        'title': 'Apply Fungicide Sprays',
-        'color': const Color(0xFF2E7D32),
-      },
-      {
-        'icon': Icons.grass,
-        'title': 'Use Resistant Varieties',
-        'color': const Color(0xFF0066CC),
-      },
-      {
-        'icon': Icons.water_drop,
-        'title': 'Maintain Proper Spacing',
-        'color': const Color(0xFF00ACC1),
-      },
-      {
-        'icon': Icons.rotate_left,
-        'title': 'Crop Rotation Practice',
-        'color': const Color(0xFF7B1FA2),
-      },
-    ];
-
+  Widget _buildPreventionSection(List<Map<String, dynamic>> preventionSteps) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -640,7 +854,9 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
               ),
               const SizedBox(width: 12),
               Text(
-                'Prevention Measures',
+                widget.diseaseName == 'Healthy'
+                    ? 'Maintenance Tips'
+                    : 'Prevention Measures',
                 style: GoogleFonts.poppins(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
@@ -706,7 +922,7 @@ class _ScanResultsScreenState extends State<ScanResultsScreen>
           child: OutlinedButton.icon(
             onPressed: () {
               HapticFeedback.lightImpact();
-              setState(() => _showDialog = true);
+              _saveReport();
             },
             icon: const Icon(Icons.save_alt_rounded, size: 20),
             label: Text(

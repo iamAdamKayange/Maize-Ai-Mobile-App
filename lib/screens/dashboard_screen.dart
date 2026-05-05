@@ -19,6 +19,9 @@ class _DashboardScreenState extends State<DashboardScreen>
   int _currentBannerIndex = 0;
   Timer? _autoScrollTimer;
 
+  // UPDATED: Added flag to control flash animation
+  bool _isManualNavigation = false;
+
   // ── Slide-in animation ──
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -43,7 +46,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     },
     {
       'title': 'Boost Your Yields',
-      'subtitle': 'Expert advice from agricultural scientists at your fingertips',
+      'subtitle':
+          'Expert advice from agricultural scientists at your fingertips',
       'color': const Color(0xFFE65100),
       'gradient': [const Color(0xFFBF360C), const Color(0xFFFF6D00)],
       'icon': Icons.trending_up_rounded,
@@ -96,6 +100,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   void _startAutoScroll() {
     _autoScrollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (!mounted) return;
+      _isManualNavigation = false; // UPDATED: Mark as auto-scroll
       final next = (_currentBannerIndex + 1) % _bannerSlides.length;
       _bannerController.animateToPage(
         next,
@@ -132,8 +137,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                 leadingWidth: 56,
                 leading: Builder(
                   builder: (ctx) => IconButton(
-                    icon: const Icon(Icons.menu_rounded,
-                        color: AppTheme.textDark),
+                    icon: const Icon(
+                      Icons.menu_rounded,
+                      color: AppTheme.textDark,
+                    ),
                     onPressed: () => Scaffold.of(ctx).openDrawer(),
                   ),
                 ),
@@ -147,8 +154,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ),
                 actions: [
                   IconButton(
-                    icon: const Icon(Icons.notifications_outlined,
-                        color: AppTheme.primaryGreen),
+                    icon: const Icon(
+                      Icons.notifications_outlined,
+                      color: AppTheme.primaryGreen,
+                    ),
                     onPressed: () =>
                         Navigator.pushNamed(context, '/notifications'),
                   ),
@@ -161,7 +170,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ── Auto-sliding banner ──
+                      // ── Auto-sliding banner (UPDATED: flash removed) ──
                       _buildBanner(),
                       const SizedBox(height: 26),
 
@@ -213,7 +222,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                         isDisease: false,
                         time: '5 hours ago',
                       ),
-                      const SizedBox(height: 90),
+                      const SizedBox(height: 16),
+
+                      // UPDATED: Added Login/Register button at the bottom
+                      _buildAuthButton(),
+                      const SizedBox(height: 30),
                     ],
                   ),
                 ),
@@ -228,8 +241,11 @@ class _DashboardScreenState extends State<DashboardScreen>
         backgroundColor: AppTheme.primaryGreen,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         elevation: 5,
-        child: const Icon(Icons.qr_code_scanner_rounded,
-            color: Colors.white, size: 28),
+        child: const Icon(
+          Icons.qr_code_scanner_rounded,
+          color: Colors.white,
+          size: 28,
+        ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
@@ -247,7 +263,12 @@ class _DashboardScreenState extends State<DashboardScreen>
             itemCount: _bannerSlides.length,
             onPageChanged: (index) {
               setState(() => _currentBannerIndex = index);
-              _animationController.forward(from: 0);
+              // UPDATED: Only trigger animation on manual navigation
+              if (_isManualNavigation) {
+                _animationController.forward(from: 0);
+              }
+              // Reset flag after handling
+              _isManualNavigation = false;
             },
             itemBuilder: (context, index) {
               return _BannerSlide(
@@ -316,10 +337,57 @@ class _DashboardScreenState extends State<DashboardScreen>
       ],
     );
   }
+
+  Widget _buildAuthButton() {
+    return GestureDetector(
+      onTap: () {
+        // Navigate to expert dashboard (login/register screen inside)
+        Navigator.pushNamed(context, '/expert-dashboard');
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [
+              AppTheme.primaryGreen,
+              AppTheme.primaryGreen.withOpacity(0.8),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.primaryGreen.withOpacity(0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.person_outline_rounded, color: Colors.white, size: 20),
+            const SizedBox(width: 10),
+            Text(
+              'Login as an Expert or Register',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ─── BANNER SLIDE WIDGET ──────────────────────────────────────────────────
-
 class _BannerSlide extends StatelessWidget {
   final Map<String, dynamic> slide;
   final AnimationController animationController;
@@ -401,12 +469,16 @@ class _BannerSlide extends StatelessWidget {
               right: 16,
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                      color: Colors.white.withOpacity(0.3), width: 1),
+                    color: Colors.white.withOpacity(0.3),
+                    width: 1,
+                  ),
                 ),
                 child: Text(
                   slide['tag'] as String,
@@ -451,7 +523,9 @@ class _BannerSlide extends StatelessWidget {
                     animation: animationController,
                     builder: (_, __) {
                       final v = animationController.value;
-                      final curve = Curves.easeOutBack.transform(v.clamp(0.0, 1.0));
+                      final curve = Curves.easeOutBack.transform(
+                        v.clamp(0.0, 1.0),
+                      );
                       return Transform.translate(
                         offset: Offset(0, 28 * (1 - curve)),
                         child: Opacity(
@@ -483,10 +557,8 @@ class _BannerSlide extends StatelessWidget {
                     animation: animationController,
                     builder: (_, __) {
                       final raw = animationController.value;
-                      final delayed =
-                          ((raw - 0.25) / 0.75).clamp(0.0, 1.0);
-                      final curve =
-                          Curves.easeOutCubic.transform(delayed);
+                      final delayed = ((raw - 0.25) / 0.75).clamp(0.0, 1.0);
+                      final curve = Curves.easeOutCubic.transform(delayed);
                       return Transform.translate(
                         offset: Offset(0, 18 * (1 - curve)),
                         child: Opacity(
@@ -513,10 +585,8 @@ class _BannerSlide extends StatelessWidget {
                     animation: animationController,
                     builder: (_, __) {
                       final raw = animationController.value;
-                      final delayed =
-                          ((raw - 0.45) / 0.55).clamp(0.0, 1.0);
-                      final curve =
-                          Curves.easeOutCubic.transform(delayed);
+                      final delayed = ((raw - 0.45) / 0.55).clamp(0.0, 1.0);
+                      final curve = Curves.easeOutCubic.transform(delayed);
                       return Transform.translate(
                         offset: Offset(0, 16 * (1 - curve)),
                         child: Opacity(
@@ -525,7 +595,9 @@ class _BannerSlide extends StatelessWidget {
                             onTap: onTap,
                             child: Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 18, vertical: 10),
+                                horizontal: 18,
+                                vertical: 10,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(12),
@@ -549,9 +621,11 @@ class _BannerSlide extends StatelessWidget {
                                     ),
                                   ),
                                   const SizedBox(width: 6),
-                                  Icon(Icons.arrow_forward_rounded,
-                                      size: 15,
-                                      color: slide['color'] as Color),
+                                  Icon(
+                                    Icons.arrow_forward_rounded,
+                                    size: 15,
+                                    color: slide['color'] as Color,
+                                  ),
                                 ],
                               ),
                             ),
@@ -703,19 +777,20 @@ class _DiseaseCard extends StatelessWidget {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  colorTop,
-                  colorTop.withOpacity(0.75),
-                ],
+                colors: [colorTop, colorTop.withOpacity(0.75)],
               ),
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(18)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(18),
+              ),
             ),
             child: Stack(
               children: [
                 Center(
-                  child: Icon(Icons.grass_rounded,
-                      color: Colors.white.withOpacity(0.65), size: 40),
+                  child: Icon(
+                    Icons.grass_rounded,
+                    color: Colors.white.withOpacity(0.65),
+                    size: 40,
+                  ),
                 ),
                 // Severity badge
                 Positioned(
@@ -723,7 +798,9 @@ class _DiseaseCard extends StatelessWidget {
                   right: 8,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: _severityColor.withOpacity(0.9),
                       borderRadius: BorderRadius.circular(6),
@@ -756,8 +833,10 @@ class _DiseaseCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: colorTop,
                     borderRadius: BorderRadius.circular(20),
@@ -774,8 +853,11 @@ class _DiseaseCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 3),
-                      const Icon(Icons.arrow_forward_ios_rounded,
-                          size: 8, color: Colors.white),
+                      const Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        size: 8,
+                        color: Colors.white,
+                      ),
                     ],
                   ),
                 ),
@@ -805,8 +887,7 @@ class _RecentScanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statusColor =
-        isDisease ? AppTheme.errorRed : AppTheme.primaryGreen;
+    final statusColor = isDisease ? AppTheme.errorRed : AppTheme.primaryGreen;
     final statusIcon = isDisease
         ? Icons.warning_amber_rounded
         : Icons.check_circle_outline_rounded;
@@ -903,8 +984,11 @@ class _RecentScanCard extends StatelessWidget {
                   ),
                 ],
               ),
-              child: const Icon(Icons.arrow_forward_ios_rounded,
-                  color: Colors.white, size: 14),
+              child: const Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: Colors.white,
+                size: 14,
+              ),
             ),
           ),
         ],

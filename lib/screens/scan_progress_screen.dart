@@ -1,9 +1,21 @@
+// ignore_for_file: unused_field
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:io';
 import '../theme/app_theme.dart';
+import '../services/maize_classifier.dart';
+import 'scan_results_screen.dart';
 
 class ScanProgressScreen extends StatefulWidget {
-  const ScanProgressScreen({super.key});
+  final File imageFile;
+  final MaizeClassifier? classifier;
+
+  const ScanProgressScreen({
+    super.key,
+    required this.imageFile,
+    required this.classifier,
+  });
 
   @override
   State<ScanProgressScreen> createState() => _ScanProgressScreenState();
@@ -14,10 +26,32 @@ class _ScanProgressScreenState extends State<ScanProgressScreen>
   late AnimationController _controller;
   String _text = 'Scanning';
   double _progressValue = 0.0;
+  Map<String, dynamic>? _result;
+  bool _isComplete = false;
+  bool _hasError = false;
+  String _errorMessage = '';
 
   @override
   void initState() {
     super.initState();
+
+    // ✅ Verify image file exists and has content
+    if (widget.imageFile.existsSync()) {
+      final fileSize = widget.imageFile.lengthSync();
+      print(
+        '✅ Image file verified: ${widget.imageFile.path}, size: $fileSize bytes',
+      );
+      if (fileSize == 0) {
+        print('❌ WARNING: Image file is empty (0 bytes)!');
+        _hasError = true;
+        _errorMessage = 'Image file is empty. Please retake photo.';
+      }
+    } else {
+      print('❌ ERROR: Image file does not exist!');
+      _hasError = true;
+      _errorMessage = 'Image file not found. Please retake photo.';
+    }
+
     _controller =
         AnimationController(vsync: this, duration: const Duration(seconds: 3))
           ..addListener(() {
@@ -29,15 +63,95 @@ class _ScanProgressScreenState extends State<ScanProgressScreen>
     _controller.forward();
     _animateText();
 
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) Navigator.pushReplacementNamed(context, '/scan-results');
+    // Only perform analysis if no error
+    if (!_hasError) {
+      _performAnalysis();
+    }
+  }
+
+  Future<void> _performAnalysis() async {
+    try {
+      if (widget.classifier != null) {
+        debugPrint('🔍 Calling classifier.predict()...');
+        _result = await widget.classifier!.predict(widget.imageFile);
+        debugPrint('✅ Prediction completed');
+
+        // Show all debug info
+        debugPrint('================== ANALYSIS RESULT ==================');
+        debugPrint('Disease: ${_result?['disease']}');
+        debugPrint('Confidence: ${_result?['confidence']}');
+        debugPrint('Confidence %: ${_result?['confidencePercentage']}');
+        debugPrint('All predictions: ${_result?['allPredictions']}');
+        debugPrint('Info: ${_result?['info']}');
+        debugPrint('Error: ${_result?['error']}');
+        debugPrint('=====================================================');
+
+        // Check for error
+        if (_result?['error'] != null) {
+          _hasError = true;
+          _errorMessage = _result?['error'] ?? 'Unknown error';
+          debugPrint('❌ Prediction error: $_errorMessage');
+        } else {
+          double conf = _result?['confidence'] ?? 0.0;
+          if (conf == 0.0) {
+            debugPrint('⚠️ WARNING: Confidence is 0.0');
+            _hasError = true;
+            _errorMessage =
+                'Model returned zero confidence. Please retake photo.';
+          } else {
+            debugPrint(
+              '✅ Valid prediction with ${(conf * 100).toStringAsFixed(2)}% confidence',
+            );
+          }
+        }
+      } else {
+        debugPrint('❌ Classifier is null!');
+        _result = {
+          'disease': 'Unknown',
+          'confidence': 0.0,
+          'error': 'Classifier not loaded',
+        };
+        _hasError = true;
+        _errorMessage = 'AI model not loaded. Please restart app.';
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ Analysis exception: $e');
+      debugPrint('Stack trace: $stackTrace');
+      _result = {
+        'disease': 'Analysis Error',
+        'confidence': 0.0,
+        'error': e.toString(),
+      };
+      _hasError = true;
+      _errorMessage = e.toString();
+    }
+
+    setState(() {
+      _isComplete = true;
     });
+
+    // Delay then navigate
+    await Future.delayed(const Duration(seconds: 2));
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ScanResultsScreen(
+            diseaseName: _hasError
+                ? 'Error'
+                : (_result?['disease'] ?? 'Unknown'),
+            confidence: _hasError ? 0.0 : (_result?['confidence'] ?? 0.0),
+            imageFile: widget.imageFile,
+          ),
+        ),
+      );
+    }
   }
 
   void _animateText() async {
     final texts = ['Scanning', 'Scanning.', 'Scanning..', 'Scanning...'];
     int i = 0;
-    while (mounted) {
+    while (mounted && !_isComplete) {
       await Future.delayed(const Duration(milliseconds: 400));
       if (mounted) setState(() => _text = texts[i++ % texts.length]);
     }
@@ -65,6 +179,21 @@ class _ScanProgressScreenState extends State<ScanProgressScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // Preview ya picha iliyopigwa
+              Container(
+                margin: const EdgeInsets.all(20),
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppTheme.primaryGreen, width: 2),
+                  image: DecorationImage(
+                    image: FileImage(widget.imageFile),
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
               // Centered Scan Progress Ring
               Expanded(
                 flex: 3,
@@ -94,19 +223,22 @@ class _ScanProgressScreenState extends State<ScanProgressScreen>
                               Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  // Plant icon in center
                                   Icon(
                                     Icons.eco,
                                     size: 48,
-                                    color: AppTheme.primaryGreen,
+                                    color: _hasError
+                                        ? Colors.orange
+                                        : AppTheme.primaryGreen,
                                   ),
                                   const SizedBox(height: 16),
                                   Text(
-                                    _text,
+                                    _hasError ? 'Error' : _text,
                                     style: GoogleFonts.poppins(
                                       fontSize: 20,
                                       fontWeight: FontWeight.w600,
-                                      color: AppTheme.primaryGreen,
+                                      color: _hasError
+                                          ? Colors.orange
+                                          : AppTheme.primaryGreen,
                                       letterSpacing: 0.5,
                                     ),
                                   ),

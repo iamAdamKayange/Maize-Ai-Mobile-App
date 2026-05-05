@@ -1,10 +1,15 @@
+// ignore_for_file: unused_field
+
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'dart:async';
+import 'dart:io';
 import '../theme/app_theme.dart';
 import '../widgets/bottom_nav_bar.dart';
+import '../services/maize_classifier.dart';
+import 'scan_progress_screen.dart';
 
 class ScannerScreen extends StatefulWidget {
   const ScannerScreen({super.key});
@@ -16,37 +21,52 @@ class ScannerScreen extends StatefulWidget {
 class _ScannerScreenState extends State<ScannerScreen>
     with WidgetsBindingObserver {
   CameraController? _cameraController;
-  MobileScannerController? _scannerController;
-  bool _isDetecting = false;
   bool _cameraInitialized = false;
-  String? _detectedPlant;
-  Timer? _detectionTimer;
+  bool _modelLoaded = false;
   List<CameraDescription>? _cameras;
+  MaizeClassifier? _classifier;
+
+  // Preview mode
+  bool _isPreviewMode = false;
+  File? _capturedImage;
+  XFile? _capturedXFile;
 
   @override
   void initState() {
     super.initState();
     _initializeCamera();
+    _loadModel();
     WidgetsBinding.instance.addObserver(this);
+  }
+
+  Future<void> _loadModel() async {
+    try {
+      _classifier = MaizeClassifier();
+      await _classifier!.loadModel();
+      setState(() {
+        _modelLoaded = true;
+      });
+      print('✅ Model loaded successfully!');
+    } catch (e) {
+      print('❌ Error loading model: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading AI model: $e')));
+      }
+    }
   }
 
   Future<void> _initializeCamera() async {
     try {
-      // Get available cameras
       _cameras = await availableCameras();
+      if (_cameras == null || _cameras!.isEmpty) return;
 
-      if (_cameras == null || _cameras!.isEmpty) {
-        print('No cameras found');
-        return;
-      }
-
-      // Get rear camera (index 0 is usually rear)
       final camera = _cameras!.firstWhere(
         (camera) => camera.lensDirection == CameraLensDirection.back,
         orElse: () => _cameras![0],
       );
 
-      // Initialize camera controller
       _cameraController = CameraController(
         camera,
         ResolutionPreset.medium,
@@ -55,91 +75,126 @@ class _ScannerScreenState extends State<ScannerScreen>
 
       await _cameraController!.initialize();
 
-      // Initialize mobile scanner
-      _scannerController = MobileScannerController(
-        facing: CameraFacing.back,
-        torchEnabled: false,
-        detectionSpeed: DetectionSpeed.normal,
-      );
-
       if (mounted) {
         setState(() {
           _cameraInitialized = true;
         });
       }
-
-      // Start detection simulation (for demo)
-      _startPlantDetection();
     } catch (e) {
-      print('Error initializing camera: $e');
+      debugPrint('Error initializing camera: $e');
+    }
+  }
+
+  Future<void> _pickImageFromGallery() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 100, // ✅ Keep original quality
+    );
+
+    if (image != null && mounted) {
+      final File imageFile = File(image.path);
+      final int fileSize = await imageFile.length();
+      debugPrint('📸 Gallery image: ${image.path}, size: $fileSize bytes');
+
+      setState(() {
+        _capturedXFile = image;
+        _capturedImage = imageFile;
+        _isPreviewMode = true;
+      });
+    }
+  }
+
+  Future<void> _takePhoto() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return;
+    }
+
+    try {
+      // ✅ Use highest available quality
+      final XFile image = await _cameraController!.takePicture();
+
+      // ✅ Verify image was captured
+      if (image.path.isEmpty) {
+        throw Exception('Empty image path');
+      }
+
+      // ✅ Check file size (should be > 0)
+      final File imageFile = File(image.path);
+      final int fileSize = await imageFile.length();
+      debugPrint('📸 Image captured: ${image.path}, size: $fileSize bytes');
+
+      if (fileSize == 0) {
+        throw Exception('Image file is empty');
+      }
+
+      if (mounted) {
+        setState(() {
+          _capturedXFile = image;
+          _capturedImage = imageFile;
+          _isPreviewMode = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('❌ Camera capture error: $e');
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error opening camera: $e')));
+        ).showSnackBar(SnackBar(content: Text('Error capturing image: $e')));
       }
     }
   }
 
-  void _startPlantDetection() {
-    _detectionTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
-      if (mounted && !_isDetecting && _cameraInitialized) {
-        // Simulate plant detection
-        // Katika real app, ungetumia ML model kutambua mimea
-        final plants = [
-          'Maize Plant',
-          'Bean Plant',
-          'Tomato Plant',
-          'Sunflower',
-        ];
-        final randomPlant = plants[DateTime.now().second % plants.length];
+  Future<void> _startScanning() async {
+    if (_capturedImage == null || _classifier == null) return;
 
-        setState(() {
-          _detectedPlant = randomPlant;
-          _isDetecting = true;
-        });
+    if (!_modelLoaded) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('AI model is still loading...')),
+      );
+      return;
+    }
 
-        // Auto-hide after 5 seconds
-        Future.delayed(const Duration(seconds: 5), () {
-          if (mounted) {
-            setState(() {
-              _isDetecting = false;
-            });
-          }
-        });
-      }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ScanProgressScreen(
+          imageFile: _capturedImage!,
+          classifier: _classifier!,
+        ),
+      ),
+    );
+
+    if (mounted) {
+      setState(() {
+        _isPreviewMode = false;
+        _capturedImage = null;
+        _capturedXFile = null;
+      });
+    }
+  }
+
+  void _retakePhoto() {
+    setState(() {
+      _isPreviewMode = false;
+      _capturedImage = null;
+      _capturedXFile = null;
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    if (state == AppLifecycleState.resumed && !_isPreviewMode) {
       _cameraController?.resumePreview();
-      _scannerController?.start();
     } else if (state == AppLifecycleState.paused) {
       _cameraController?.pausePreview();
-      _scannerController?.stop();
-    }
-  }
-
-  Future<void> _toggleFlash() async {
-    if (_scannerController != null) {
-      await _scannerController!.toggleTorch();
-      setState(() {});
-    }
-  }
-
-  Future<void> _switchCamera() async {
-    if (_scannerController != null) {
-      await _scannerController!.switchCamera();
-      setState(() {});
     }
   }
 
   @override
   void dispose() {
-    _detectionTimer?.cancel();
     _cameraController?.dispose();
-    _scannerController?.dispose();
+    _classifier?.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -150,9 +205,18 @@ class _ScannerScreenState extends State<ScannerScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Camera Preview
-          if (_cameraInitialized && _cameraController != null)
+          // Camera Preview or Captured Image
+          if (!_isPreviewMode &&
+              _cameraInitialized &&
+              _cameraController != null)
             CameraPreview(_cameraController!)
+          else if (_isPreviewMode && _capturedImage != null)
+            Image.file(
+              _capturedImage!,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+            )
           else
             Container(
               color: Colors.black,
@@ -161,26 +225,11 @@ class _ScannerScreenState extends State<ScannerScreen>
               ),
             ),
 
-          if (_cameraInitialized)
-            Stack(
-              children: [
-                MobileScanner(
-                  controller: _scannerController,
-                  onDetect: (capture) {
-                    // process hapa
-                  },
-                ),
-
-                // Hii ndio "child" yako sasa
-                Container(color: Colors.transparent),
-              ],
-            ),
-
-          // Scanner frame and UI
+          // UI Overlay
           SafeArea(
             child: Column(
               children: [
-                // Top bar with controls
+                // Top bar
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -189,260 +238,342 @@ class _ScannerScreenState extends State<ScannerScreen>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      // Back Button
                       GestureDetector(
-                        onTap: () => Navigator.pop(context),
+                        onTap: () {
+                          if (_isPreviewMode) {
+                            _retakePhoto();
+                          } else {
+                            Navigator.pop(context);
+                          }
+                        },
                         child: Container(
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.5),
+                            color: Colors.black.withAlpha(128),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(
-                            Icons.arrow_back_ios_rounded,
+                          child: Icon(
+                            _isPreviewMode ? Icons.close : Icons.arrow_back,
                             color: Colors.white,
-                            size: 18,
                           ),
                         ),
                       ),
-                      Row(
-                        children: [
-                          GestureDetector(
-                            onTap: _toggleFlash,
-                            child: Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.5),
-                                shape: BoxShape.circle,
+
+                      // Title
+                      if (!_isPreviewMode)
+                        Text(
+                          'Scan Plant',
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black.withAlpha(100),
+                                blurRadius: 4,
                               ),
-                              child: Icon(
-                                _scannerController?.torchEnabled == true
-                                    ? Icons.flash_on_rounded
-                                    : Icons.flash_off_rounded,
-                                color: Colors.white,
-                                size: 20,
-                              ),
+                            ],
+                          ),
+                        ),
+
+                      // Gallery Button
+                      if (!_isPreviewMode)
+                        GestureDetector(
+                          onTap: _pickImageFromGallery,
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withAlpha(128),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.photo_library,
+                              color: Colors.white,
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          GestureDetector(
-                            onTap: _switchCamera,
-                            child: Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.5),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.cameraswitch_rounded,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                        )
+                      else
+                        const SizedBox(width: 40),
                     ],
                   ),
                 ),
 
-                // Hint label
-                Container(
-                  margin: const EdgeInsets.only(top: 8),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(25),
-                  ),
-                  child: Text(
-                    'Point Camera at Plant',
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
+                const Spacer(),
 
-                // Scanner frame
-                Expanded(
-                  child: Center(
-                    child: CustomPaint(
-                      painter: _ScanFramePainter(),
-                      size: const Size(280, 220),
-                    ),
-                  ),
-                ),
-
-                // Detection card
-                AnimatedSlide(
-                  offset: _detectedPlant != null && _isDetecting
-                      ? Offset.zero
-                      : const Offset(0, 2),
-                  duration: const Duration(milliseconds: 400),
-                  curve: Curves.easeOut,
-                  child: AnimatedOpacity(
-                    opacity: _detectedPlant != null && _isDetecting ? 1 : 0,
-                    duration: const Duration(milliseconds: 300),
-                    child: GestureDetector(
-                      onTap: () {
-                        if (_detectedPlant != null) {
-                          Navigator.pushNamed(
-                            context,
-                            '/scan-progress',
-                            arguments: {'plantName': _detectedPlant},
-                          );
-                          setState(() {
-                            _isDetecting = false;
-                            _detectedPlant = null;
-                          });
-                        }
-                      },
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 16,
-                        ),
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(18),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.3),
-                              blurRadius: 20,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 52,
-                              height: 52,
-                              decoration: BoxDecoration(
-                                color: AppTheme.softGreen,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.grass_rounded,
-                                color: AppTheme.primaryGreen,
-                                size: 28,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _detectedPlant ?? 'Plant Detected',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppTheme.textDark,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Tap to analyze plant health',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 11,
-                                      color: AppTheme.textGrey,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              width: 34,
-                              height: 34,
-                              decoration: const BoxDecoration(
-                                color: AppTheme.primaryGreen,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.arrow_forward_ios_rounded,
-                                color: Colors.white,
-                                size: 14,
-                              ),
-                            ),
-                          ],
-                        ),
+                // Preview Mode Controls
+                if (_isPreviewMode)
+                  Container(
+                    margin: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withAlpha(180),
+                        ],
                       ),
                     ),
+                    child: Column(
+                      children: [
+                        // Image Preview Card
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 20),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withAlpha(50),
+                                blurRadius: 20,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              // Thumbnail
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.file(
+                                  _capturedImage!,
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              // Info
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Photo Captured',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.textDark,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Ready to analyze this maize plant',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: AppTheme.textGrey,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // Retake icon
+                              GestureDetector(
+                                onTap: _retakePhoto,
+                                child: Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(
+                                    Icons.refresh,
+                                    size: 18,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Action Buttons
+                        Row(
+                          children: [
+                            // Retake Button
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _retakePhoto,
+                                icon: const Icon(Icons.camera_alt, size: 20),
+                                label: Text(
+                                  'Retake',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  side: const BorderSide(color: Colors.white),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            // Start Scanning Button
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: _startScanning,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.primaryGreen,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.analytics, size: 20),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Start Scanning',
+                                      style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
+
+                // Camera Controls (when not in preview mode)
+                if (!_isPreviewMode && _cameraInitialized)
+                  Container(
+                    margin: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withAlpha(180),
+                        ],
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        // Hint text
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 20),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.center_focus_strong,
+                                size: 16,
+                                color: Colors.white.withAlpha(200),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Center the maize leaf in frame',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  color: Colors.white.withAlpha(200),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Capture Button
+                        GestureDetector(
+                          onTap: _takePhoto,
+                          child: Container(
+                            width: 72,
+                            height: 72,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 4),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withAlpha(100),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Container(
+                              margin: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // Model loading indicator
+                if (!_modelLoaded && !_isPreviewMode)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 100),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Loading AI Model...',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
         ],
       ),
-      bottomNavigationBar: const AppBottomNavBar(currentIndex: 1),
+      bottomNavigationBar: !_isPreviewMode
+          ? const AppBottomNavBar(currentIndex: 1)
+          : null,
     );
   }
-}
-
-class _ScanFramePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 3
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    const cornerLen = 30.0;
-    const r = 8.0;
-    final w = size.width;
-    final h = size.height;
-
-    // Animated scanning effect
-    final scanProgress = (DateTime.now().millisecondsSinceEpoch % 2000) / 2000;
-    final scanY = h * scanProgress;
-
-    // Scan line
-    final linePaint = Paint()
-      ..shader = LinearGradient(
-        colors: [
-          Colors.transparent,
-          AppTheme.lightGreen.withValues(alpha: 0.8),
-          Colors.transparent,
-        ],
-      ).createShader(Rect.fromLTWH(0, scanY, w, 2))
-      ..strokeWidth = 2;
-    canvas.drawLine(Offset(0, scanY), Offset(w, scanY), linePaint);
-
-    // Draw corners
-    // TL corner
-    canvas.drawLine(Offset(r, 0), Offset(r + cornerLen, 0), paint);
-    canvas.drawLine(Offset(0, r), Offset(0, r + cornerLen), paint);
-    // TR corner
-    canvas.drawLine(Offset(w - r - cornerLen, 0), Offset(w - r, 0), paint);
-    canvas.drawLine(Offset(w, r), Offset(w, r + cornerLen), paint);
-    // BL corner
-    canvas.drawLine(Offset(0, h - r - cornerLen), Offset(0, h - r), paint);
-    canvas.drawLine(Offset(r, h), Offset(r + cornerLen, h), paint);
-    // BR corner
-    canvas.drawLine(Offset(w, h - r - cornerLen), Offset(w, h - r), paint);
-    canvas.drawLine(Offset(w - r - cornerLen, h), Offset(w - r, h), paint);
-
-    // Inner border guide
-    final guidePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.2)
-      ..strokeWidth = 1
-      ..style = PaintingStyle.stroke;
-
-    final innerRect = Rect.fromLTWH(20, 20, w - 40, h - 40);
-    canvas.drawRect(innerRect, guidePaint);
-  }
-
-  @override
-  bool shouldRepaint(_ScanFramePainter old) => true;
 }
